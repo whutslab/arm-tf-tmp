@@ -1,0 +1,63 @@
+host主机设置TAP/TUN：
+sudo vim /etc/network/interfaces
+#配置eth0静态地址
+auto eth0
+iface eth0 inet static
+address 192.168.21.1
+netmask 255.255.255.0
+#创建网桥设备armbr0
+auto armbr0
+iface armbr0 inet static
+address 192.168.21.22
+netmask 255.255.255.0
+pre-up ifconfig eth0 0.0.0.0 promisc
+post-down ifconfig eth0 0.0.0.0 –promisc
+#创建TAP设备
+pre-up ip tuntap add dev ARMsean mode tap user sean
+pre-up ifconfig ARMsean 0.0.0.0 promisc
+post-down ip tuntap del dev ARMsean mode tap
+#将TAP设备桥接到eth0
+bridge_ports eth0 ARMsean
+
+#重启网络服务：
+#ubuntu18 建议关闭networking.service
+sudo service network-manager restart
+
+
+host主机设置DHCP服务：
+sudo apt-get install isc-dhcp-server
+sudo vim /etc/default/isc-dhcp-server
+#指定网卡（配置为静态ip
+INTERFACESv4="eth0" 
+sudo vim /etc/dhcp/dhcpd.conf
+#修改配置文件
+subnet 192.168.21.0 netmask 255.255.255.0 {
+    range 192.168.12.100 192.168.21.150;#IP地址池
+    ## dhcp客户端可以获取的ip范围（非绑定的）
+    ##如果已经设定了ip-mac绑定，又不允许未绑定的mac获取ip可以注释上行range部分
+    default-lease-time 6000;                 #为客户机获取网络参数的默认租约时间
+    max-lease-time 72000;                    #为客户机获取网络参数之后的最大租约时
+    option subnet-mask 255.255.255.0;        #子网掩码
+    option routers 192.168.21.1;           #路由
+    option domain-name-servers 114.114.114.114; #域名服务器
+}
+#重启armbr0,eth0, 重启dhcp服务
+sudo ifdown armbr0
+sudo ifdown eth0
+sudo ifup armbr0
+sudo ifup eh0
+sudo service isc-dhcp-server restart
+
+
+host配置NFS服务:
+sudo apt-get install rpcbind
+sudo apt-get install nfs-kernel-server
+#修改配置文件
+sudo vim /etc/exports
+/nfsshare *(rw,sync,no_subtree_check,anonuid=1000,anongid=1000)
+#启动nfs服务器
+sudo service rpcbind start
+sudo service nfs-kernel-server start
+#nfs客户端挂载
+sudo mkdir /mnt/nfs
+sudo mount -t nfs 192.168.21.1:/nfsshare /mnt/nfs
